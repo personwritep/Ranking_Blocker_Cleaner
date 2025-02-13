@@ -1,0 +1,329 @@
+// ==UserScript==
+// @name        Ranking Blocker Cleaner
+// @namespace        http://tampermonkey.net/
+// @version        0.3
+// @description        Ranking Blocker のブロックデータから退会ユーザーを削除
+// @author        Ameba Blog User
+// @match        https://ameblo.jp/*
+// @exclude        https://ameblo.jp/personwritep/entry-12872529591.html
+// @icon        https://www.google.com/s2/favicons?sz=64&domain=ameba.jp
+// @noframes
+// @grant        none
+// @updateURL        https://github.com/personwritep/Ranking_Blocker_Cleaner/raw/main/Ranking_Blocker_Cleaner.user.js
+// @downloadURL        https://github.com/personwritep/Ranking_Blocker_Cleaner/raw/main/Ranking_Blocker_Cleaner.user.js
+// ==/UserScript==
+
+
+let block_id=[]; // ブロックIDの配列データ
+let task=0; // 作業の段階
+let taikai=0; // 退会した会員数
+
+
+main();
+
+
+function main(){
+    let help_url='https://ameblo.jp/personwritep/entry-12872529591.html'
+
+    let SVG_h=
+        '<svg class="svg_help" height="22" width="22"  viewBox="0 0 200 200">'+
+        '<path d="M89 22C71 25 54 33 41 46C7 81 11 142 50 171C58 177 68 182 78 18'+
+        '5C90 188 103 189 115 187C126 185 137 181 146 175C155 169 163 162 169 153'+
+        'C190 123 189 80 166 52C147 30 118 18 89 22z" style="fill:#888;"></path>'+
+        '<path d="M67 77C73 75 78 72 84 70C94 66 114 67 109 83C106 91 98 95 93 10'+
+        '1C86 109 83 116 83 126L111 126C112 114 122 108 129 100C137 90 141 76 135'+
+        ' 64C127 45 101 45 84 48C80 49 71 50 68 54C67 56 67 59 67 61L67 77M85 143'+
+        'L85 166L110 166L110 143L85 143z" style="fill:#fff;"></path>'+
+        '</svg>';
+
+
+    let inner=
+        '<div id="modal">'+
+        '<div id="menu_RBC">'+
+
+        '<div class="menu_inner1">'+
+        '<div class="inner_RBC">'+
+        '<input id="button1" type="submit" value="ファイル読込み">'+
+        '<input id="button2" type="file">'+
+        '<span class="result_disp"></span>'+
+        '</div>'+
+        '<div class="inner_RBC">'+
+        '<input id="button3" type="submit" value="退会ユーザーのチェック">'+
+        '<span class="result_disp"></span>'+
+        '</div>'+
+        '<div class="inner_RBC">'+
+        '<input id="button4" type="submit" value="不要データ削除とファイル保存">'+
+        '<span class="result_disp"></span>'+
+        '</div>'+
+        '<div class="inner_RBC">'+
+        '<span class="result_disp"></span>'+
+        '</div>'+
+        '<div>'+
+        '<a href="'+ help_url +'" target="_blank" rel="noopener noreferrer">'+
+        SVG_h +'</a>'+
+        '<input id="button0" type="submit" value="✖">'+
+        '</div></div>'+
+
+        '<div class="menu_inner2">'+
+        '<ul></ul>'+
+        '</div></div>'+
+
+        '<style>'+
+        'html { overflow: hidden; } '+
+        '#modal { position: fixed; top: 0; left: 0; z-index: 6000; width: 100%; height: 100%; } '+
+        '#menu_RBC { position: absolute; top: 70px; left: calc(50% - 200px); '+
+        'display: flex; flex-direction: column; padding: 12px 15px; box-sizing: border-box; '+
+        'font: normal 16px/16px Meiryo; color: #000; background: #d8e8f0; '+
+        'border: 1px solid #aaa; box-shadow: 0 0 0 100vw #00000080; } '+
+        '#menu_RBC .menu_inner1 { display: flex; '+
+        'justify-content: space-between; align-items: center; margin-bottom: 12px; } '+
+        '#menu_RBC .menu_inner2 { height: calc(100vh - 240px); '+
+        'width: 400px; padding: 8px 0; background: #fafafa; } '+
+        '#menu_RBC ul { height: 100%; overflow-y: scroll; padding: 0px 8px; } '+
+        '#menu_RBC li { padding: 3px 0 3px 12px; margin: 1px 0; white-space: nowrap; } '+
+        '#menu_RBC .db0 { display: inline-block; width: 50px; text-align: left; } '+
+        '#menu_RBC .db1 { display: inline-block; white-space: nowrap; } '+
+        '#menu_RBC input { '+
+        'font: normal 15px/22px Meiryo; height: 30px; padding: 3px 8px 0; } '+
+        '#menu_RBC input.hide { width: 0; padding: 3px 0 0; border: none; } '+
+        '#menu_RBC #button2 { display: none; } '+
+        '#menu_RBC .result_disp { font: normal 15px/22px Meiryo; margin-left: 15px; } '+
+        '#menu_RBC #button0 { width: 27px; padding: 3px 6px 0; } '+
+        '#menu_RBC .svg_help { margin: 0 6px -5px; } '+
+        '</style></div>';
+
+    if(!document.querySelector('#menu_RBC')){
+        document.body.insertAdjacentHTML('beforeend', inner); }
+
+
+    let menu_RBC=document.querySelector('#menu_RBC');
+    if(menu_RBC){
+        do_task(); }
+
+} // main()
+
+
+
+function do_task(){
+
+    if(task==0){
+        task_menu(task);
+        close_menu();
+
+        let button1=document.querySelector('#button1');
+        let button2=document.querySelector('#button2');
+        if(button1 && button2){
+            button1.onclick=()=>{
+                button2.click(); }
+
+            button2.addEventListener("change" , function(){
+                if(!(button2.value)) return; // ファイルが選択されない場合
+                let file_list=button2.files;
+                if(!file_list) return; // ファイルリストが選択されない場合
+                let file=file_list[0];
+                if(!file) return; // ファイルが無い場合
+
+                let file_reader=new FileReader();
+                file_reader.readAsText(file);
+                file_reader.onload=function(){
+                    if(file_reader.result.slice(0, 7)=='["tmp1"'){ // ranking_bl.jsonの確認
+                        let data_in=JSON.parse(file_reader.result);
+                        block_id=data_in; // 読込み
+                        disp_list();
+
+                        task=1;
+                        do_task(); }
+                    else{
+                        let str=' ⛔ ファイル名は「ranking_bl (n).json」形式です　';
+                        set_result(str); }};
+
+                setTimeout(()=>{
+                    this.value=null; // 同ファイルの再読込みを可能にする
+                }, 1000);
+
+            }); }
+    } // if(task==0)
+
+
+
+    if(task==1){
+        task_menu(task);
+        close_menu();
+
+        let str='全件数 ['+ (block_id.length-2) +']';
+        set_result(str);
+
+        let button3=document.querySelector('#button3');
+        if(button3){
+            button3.onclick=()=>{
+                button3.classList.add('hide');
+                let str='しばらくお待ちください　　調査中 ['+ (block_id.length-2) +']';
+                set_result(str);
+                setTimeout(()=>{
+                    taikai=cleaner();
+                    task=2;
+                    do_task();
+                }, 100);
+            }}
+
+    } // if(task==1)
+
+
+
+    if(task==2){
+        task_menu(task);
+        close_menu();
+
+        let str='退会数 ['+ taikai +']';
+        set_result(str);
+
+        let button4=document.querySelector('#button4');
+        if(button4){
+            button4.onclick=()=>{
+
+                if(taikai>0){
+                    delete_data();
+
+                    if(block_id.length>2){
+                        let write_json=JSON.stringify(block_id);
+                        let blob=new Blob([write_json], {type: 'application/json'});
+                        let a=document.createElement("a");
+                        a.href=URL.createObjectURL(blob);
+                        document.body.appendChild(a);
+                        a.download='ranking_bl.json';
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(a.href); }
+
+                    task=3;
+                    do_task(); }
+
+                else{
+                    alert(
+                        ' 🟢 ファイルの登録データに退会ユーザーは含まれていません\n'+
+                        '　　ファイル保存は不要なので、ツールを終了してください。'); }
+            }}
+
+    } // if(task==2)
+
+
+
+    if(task==3){
+        task_menu(task);
+        close_menu();
+
+        let str='以下のデータを保存しました　全件数['+ (block_id.length-2) +']';
+        set_result(str);
+
+        disp_list();
+
+    } // if(task==3)
+
+} // do_task()
+
+
+
+function task_menu(n){
+    let inner_RBC=document.querySelectorAll('.inner_RBC');
+    for(let k=0; k<inner_RBC.length; k++){
+        inner_RBC[k].style.display='none'; }
+    inner_RBC[n].style.display='block'; }
+
+
+
+function close_menu(){
+    let modal=document.querySelector('#modal');
+    let button0=document.querySelector('#button0');
+    if(button0 && modal){
+        button0.onclick=()=>{
+            modal.remove(); }}}
+
+
+
+function set_result(str){
+    let result_disp=document.querySelectorAll('.result_disp')[task];
+    if(result_disp){
+        result_disp.innerHTML=str; }}
+
+
+
+function disp_list(){
+    let ul=document.querySelector('#menu_RBC ul');
+    if(ul){
+        ul.innerHTML=''; // リストをリセットする
+
+        for(let k=0; k<2; k++){
+            let li=
+                '<li>'+
+                '<span class="db0">--</span>'+
+                '<span class="db1">'+ block_id[k] +'</span>'+
+                '</li>';
+            ul.insertAdjacentHTML('beforeend', li ); }
+
+        for(let k=2; k<block_id.length; k++){
+            let li=
+                '<li>'+
+                '<span class="db0">'+ (k-1) +'</span>'+
+                '<span class="db1">'+ block_id[k] +'</span>'+
+                '</li>';
+            ul.insertAdjacentHTML('beforeend', li );
+        }}
+
+} // disp_list()
+
+
+
+function cleaner(){
+    let count=0;
+
+    let ul_li=document.querySelectorAll('#menu_RBC ul li');
+    if(ul_li.length>3){ // block_id=['tmp1', '%Ameba-ID', 'xxxxxx', ]
+        for(let k=2; k<ul_li.length; k++){
+            let id=ul_li[k].querySelector('.db1').textContent;
+            if(id){
+                if(check_id(id)){
+                    count+=1;
+                    ul_li[k].style.background='#2196f395'; }}} // if(ul_li.length>3)
+
+        return count; }
+    else{
+        alert(
+            " ⛔ ブロックの登録がありません\n\n"+
+            "　　ページをリロードして別のファイルを読込むか\n"+
+            "　　このクリーナーツールを終了してください");
+        return 0; }
+
+
+
+    function check_id(id){
+        let url='https://ameblo.jp/'+ id;
+        if(load(url)!=200){
+            return true; } // target_urlが無い時に true
+
+        function load(_url){
+            let xhr;
+            xhr=new XMLHttpRequest();
+            xhr.open("HEAD", _url, false); // 同期モード
+            xhr.send();
+            return xhr.status; }}
+
+} // cleaner()
+
+
+
+function delete_data(){
+    let clean_block_id=[];
+
+    let ul_li=document.querySelectorAll('#menu_RBC ul li');
+    for(let k=0; k<ul_li.length; k++){
+        if(ul_li[k].hasAttribute('style')){
+            ul_li[k].remove(); }
+        else{
+            let id=ul_li[k].querySelector('.db1').textContent;
+            if(id){
+                clean_block_id.push(id); }}}
+
+    block_id=clean_block_id;
+
+} // delete_data()
+
